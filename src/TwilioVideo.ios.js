@@ -135,6 +135,12 @@ export default class extends Component {
     this.flipCamera = this.flipCamera.bind(this)
     this.connect = this.connect.bind(this)
     this.disconnect = this.disconnect.bind(this)
+
+    this.unpublishLocalAudio = this.unpublishLocalAudio.bind(this)
+    this.unpublishLocalVideo = this.unpublishLocalVideo.bind(this)
+
+    this.publishLocalAudio = this.publishLocalAudio.bind(this)
+    this.publishLocalVideo = this.publishLocalVideo.bind(this)
     this.setRemoteAudioPlayback = this.setRemoteAudioPlayback.bind(this)
   }
 
@@ -199,6 +205,34 @@ export default class extends Component {
    */
   disconnect () {
     TWVideoModule.disconnect()
+  }
+
+  /**
+   * Publish a local audio track
+   */
+  publishLocalAudio () {
+    TWVideoModule.publishLocalAudio()
+  }
+
+  /**
+   * Publish a local video track
+   */
+  publishLocalVideo () {
+    TWVideoModule.publishLocalVideo()
+  }
+
+  /**
+   * Unpublish a local audio track
+   */
+  unpublishLocalAudio () {
+    TWVideoModule.unpublishLocalAudio()
+  }
+
+  /**
+   * Unpublish a local video track
+   */
+  unpublishLocalVideo () {
+    TWVideoModule.unpublishLocalVideo()
   }
 
   _startLocalVideo () {
