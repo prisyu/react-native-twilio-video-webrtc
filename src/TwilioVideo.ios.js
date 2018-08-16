@@ -141,6 +141,7 @@ export default class extends Component {
 
     this.publishLocalAudio = this.publishLocalAudio.bind(this)
     this.publishLocalVideo = this.publishLocalVideo.bind(this)
+    this.setRemoteAudioPlayback = this.setRemoteAudioPlayback.bind(this)
   }
 
   componentWillMount () {
@@ -153,6 +154,13 @@ export default class extends Component {
     this._unregisterEvents()
     this._stopLocalVideo()
     this._stopLocalAudio()
+  }
+
+  /**
+   * Locally mute/ unmute all remote audio tracks from a given participant
+   */
+  setRemoteAudioPlayback ({participantSid, enabled}) {
+    TWVideoModule.setRemoteAudioPlayback(participantSid, enabled)
   }
 
   /**
