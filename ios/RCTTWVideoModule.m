@@ -172,19 +172,11 @@ RCT_REMAP_METHOD(setLocalVideoEnabled, enabled:(BOOL)enabled setLocalVideoEnable
 
 
 RCT_EXPORT_METHOD(flipCamera) {
-  if (self.camera.source == TVICameraCaptureSourceFrontCamera) {
-    [self.camera selectSource:TVICameraCaptureSourceBackCameraWide];
-    if (self.localVideoTrack) {
-      for (TVIVideoView *r in self.localVideoTrack.renderers) {
-        r.mirror = NO;
-      }
-    }
-  } else {
-    [self.camera selectSource:TVICameraCaptureSourceFrontCamera];
-    if (self.localVideoTrack) {
-      for (TVIVideoView *r in self.localVideoTrack.renderers) {
-        r.mirror = YES;
-      }
+  // To fix front facing camera bug
+  [self.camera selectSource:TVICameraCaptureSourceBackCameraWide];
+  if (self.localVideoTrack) {
+    for (TVIVideoView *r in self.localVideoTrack.renderers) {
+      r.mirror = NO;
     }
   }
 }
