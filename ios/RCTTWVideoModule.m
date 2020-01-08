@@ -37,6 +37,7 @@ static NSString* statsReceived                = @"statsReceived";
 @property (strong, nonatomic) TVILocalVideoTrack* localVideoTrack;
 @property (strong, nonatomic) TVILocalAudioTrack* localAudioTrack;
 @property (strong, nonatomic) TVIRoom *room;
+@property (nonatomic) BOOL listening;
 
 @end
 
@@ -101,11 +102,17 @@ RCT_EXPORT_MODULE();
   }
 }
 
+RCT_EXPORT_METHOD(changeListenerStatus:(BOOL)value) {
+    self.listening = value;
+}
+
 RCT_EXPORT_METHOD(setRemoteAudioPlayback:(NSString *)participantSid enabled:(BOOL)enabled) {
     TVIRemoteParticipant *participant = [self.room getRemoteParticipantWithSid:participantSid];
-    NSArray<TVIRemoteAudioTrackPublication *> *trackPublications = participant.remoteAudioTracks;
-    for(TVIRemoteAudioTrackPublication *remoteAudioTrack in trackPublications) {
-        [remoteAudioTrack.remoteTrack setPlaybackEnabled:enabled];
+    if (participant) {
+        NSArray<TVIRemoteAudioTrackPublication *> *trackPublications = participant.remoteAudioTracks;
+        for(TVIRemoteAudioTrackPublication *remoteAudioTrack in trackPublications) {
+            [remoteAudioTrack.remoteTrack setPlaybackEnabled:enabled];
+        }
     }
 }
 
@@ -180,6 +187,36 @@ RCT_EXPORT_METHOD(flipCamera) {
     }
   }
 }
+
+RCT_EXPORT_METHOD(toggleSoundSetup:(BOOL)speaker) {
+  if(speaker){
+      kDefaultAVAudioSessionConfigurationBlock();
+
+      // Overwrite the audio route
+      AVAudioSession *session = [AVAudioSession sharedInstance];
+      NSError *error = nil;
+      if (![session setMode:AVAudioSessionModeVideoChat error:&error]) {
+          NSLog(@"AVAudiosession setMode %@",error);
+      }
+
+      if (![session overrideOutputAudioPort:AVAudioSessionPortOverrideNone error:&error]) {
+          NSLog(@"AVAudiosession overrideOutputAudioPort %@",error);
+      }
+    } else {
+      kDefaultAVAudioSessionConfigurationBlock();
+
+      // Overwrite the audio route
+      AVAudioSession *session = [AVAudioSession sharedInstance];
+      NSError *error = nil;
+      if (![session setMode:AVAudioSessionModeVoiceChat error:&error]) {
+          NSLog(@"AVAudiosession setMode %@",error);
+      }
+
+      if (![session overrideOutputAudioPort:AVAudioSessionPortOverrideNone error:&error]) {
+          NSLog(@"AVAudiosession overrideOutputAudioPort %@",error);
+      }
+    }
+  }
 
 -(void)convertBaseTrackStats:(TVIBaseTrackStats *)stats result:(NSMutableDictionary *)result {
   result[@"trackSid"] = stats.trackSid;
@@ -271,7 +308,7 @@ RCT_EXPORT_METHOD(getStats) {
           @"localVideoTrackStats": localVideoTrackStats
         };
       }
-      [self sendEventWithName:statsReceived body:eventBody];
+      [self sendEventCheckingListenerWithName:statsReceived body:eventBody];
     }];
   }
 }
@@ -308,16 +345,22 @@ RCT_EXPORT_METHOD(disconnect) {
 
 # pragma mark - TVICameraCapturerDelegate
 
+-(void)sendEventCheckingListenerWithName:(NSString *)event body:(NSMutableDictionary *)body {
+    if (_listening) {
+        [self sendEventWithName:event body:body];
+    }
+}
+
 -(void)cameraCapturerWasInterrupted:(TVICameraCapturer *)capturer {
-  [self sendEventWithName:cameraWasInterrupted body:nil];
+    [self sendEventCheckingListenerWithName:cameraWasInterrupted body:nil];
 }
 
 -(void)cameraCapturerPreviewDidStart:(TVICameraCapturer *)capturer {
-  [self sendEventWithName:cameraDidStart body:nil];
+  [self sendEventCheckingListenerWithName:cameraDidStart body:nil];
 }
 
 -(void)cameraCapturer:(TVICameraCapturer *)capturer didStopRunningWithError:(NSError *)error {
-  [self sendEventWithName:cameraDidStopRunning body:@{ @"error" : error.localizedDescription }];
+  [self sendEventCheckingListenerWithName:cameraDidStopRunning body:@{ @"error" : error.localizedDescription }];
 }
 
 # pragma mark - TVIRoomDelegate
@@ -331,77 +374,76 @@ RCT_EXPORT_METHOD(disconnect) {
   }
   TVILocalParticipant *localParticipant = room.localParticipant;
   [participants addObject:[localParticipant toJSON]];
+    [self sendEventCheckingListenerWithName:roomDidConnect body:@{ @"roomName" : room.name , @"roomSid": room.sid, @"participants" : participants }];
 
-  [self sendEventWithName:roomDidConnect body:@{ @"roomName" : room.name , @"participants" : participants }];
 }
 
 - (void)room:(TVIRoom *)room didDisconnectWithError:(nullable NSError *)error {
   self.room = nil;
 
-  NSMutableDictionary *body = [@{ @"roomName": room.name } mutableCopy];
+  NSMutableDictionary *body = [@{ @"roomName": room.name, @"roomSid": room.sid } mutableCopy];
 
   if (error) {
     [body addEntriesFromDictionary:@{ @"error" : error.localizedDescription }];
   }
-
-  [self sendEventWithName:roomDidDisconnect body:body];
+    [self sendEventCheckingListenerWithName:roomDidDisconnect body:body];
 }
 
 - (void)room:(TVIRoom *)room didFailToConnectWithError:(nonnull NSError *)error{
   self.room = nil;
 
-  NSMutableDictionary *body = [@{ @"roomName": room.name } mutableCopy];
+  NSMutableDictionary *body = [@{ @"roomName": room.name, @"roomSid": room.sid } mutableCopy];
 
   if (error) {
     [body addEntriesFromDictionary:@{ @"error" : error.localizedDescription }];
   }
 
-  [self sendEventWithName:roomDidFailToConnect body:body];
+  [self sendEventCheckingListenerWithName:roomDidFailToConnect body:body];
 }
 
 
 - (void)room:(TVIRoom *)room participantDidConnect:(TVIRemoteParticipant *)participant {
   participant.delegate = self;
 
-  [self sendEventWithName:roomParticipantDidConnect body:@{ @"roomName": room.name, @"participant": [participant toJSON] }];
+  [self sendEventCheckingListenerWithName:roomParticipantDidConnect body:@{ @"roomName": room.name, @"roomSid": room.sid, @"participant": [participant toJSON] }];
 }
 
 - (void)room:(TVIRoom *)room participantDidDisconnect:(TVIRemoteParticipant *)participant {
-  [self sendEventWithName:roomParticipantDidDisconnect body:@{ @"roomName": room.name, @"participant": [participant toJSON] }];
+  [self sendEventCheckingListenerWithName:roomParticipantDidDisconnect body:@{ @"roomName": room.name, @"roomSid": room.sid, @"participant": [participant toJSON] }];
 }
 
 # pragma mark - TVIRemoteParticipantDelegate
 
 - (void)subscribedToVideoTrack:(TVIRemoteVideoTrack *)videoTrack publication:(TVIRemoteVideoTrackPublication *)publication forParticipant:(TVIRemoteParticipant *)participant {
-    [self sendEventWithName:participantAddedVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+    [self sendEventCheckingListenerWithName:participantAddedVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)unsubscribedFromVideoTrack:(TVIRemoteVideoTrack *)videoTrack publication:(TVIRemoteVideoTrackPublication *)publication forParticipant:(TVIRemoteParticipant *)participant {
-    [self sendEventWithName:participantRemovedVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+    [self sendEventCheckingListenerWithName:participantRemovedVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)subscribedToAudioTrack:(TVIRemoteAudioTrack *)audioTrack publication:(TVIRemoteAudioTrackPublication *)publication forParticipant:(TVIRemoteParticipant *)participant {
-    [self sendEventWithName:participantAddedAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+    [self sendEventCheckingListenerWithName:participantAddedAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)unsubscribedFromAudioTrack:(TVIRemoteAudioTrack *)audioTrack publication:(TVIRemoteAudioTrackPublication *)publication forParticipant:(TVIRemoteParticipant *)participant {
-    [self sendEventWithName:participantRemovedAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+    [self sendEventCheckingListenerWithName:participantRemovedAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)remoteParticipant:(TVIRemoteParticipant *)participant enabledVideoTrack:(TVIRemoteVideoTrackPublication *)publication {
-  [self sendEventWithName:participantEnabledVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+  [self sendEventCheckingListenerWithName:participantEnabledVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)remoteParticipant:(TVIRemoteParticipant *)participant disabledVideoTrack:(TVIRemoteVideoTrackPublication *)publication {
-  [self sendEventWithName:participantDisabledVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+  [self sendEventCheckingListenerWithName:participantDisabledVideoTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)remoteParticipant:(TVIRemoteParticipant *)participant enabledAudioTrack:(TVIRemoteAudioTrackPublication *)publication {
-    [self sendEventWithName:participantEnabledAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+    [self sendEventCheckingListenerWithName:participantEnabledAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 - (void)remoteParticipant:(TVIRemoteParticipant *)participant disabledAudioTrack:(TVIRemoteAudioTrackPublication *)publication {
-    [self sendEventWithName:participantDisabledAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
+    [self sendEventCheckingListenerWithName:participantDisabledAudioTrack body:@{ @"participant": [participant toJSON], @"track": [publication toJSON] }];
 }
 
 // TODO: Local participant delegates
